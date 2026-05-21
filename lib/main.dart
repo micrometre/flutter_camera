@@ -64,6 +64,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   // Dynamic States
   bool _isRecording = false;
+  bool _isPaused = false;
   bool _isPlayingPlayback = false;
   List<String> _capturedFrames = [];
   int _playbackIndex = 0;
@@ -75,6 +76,8 @@ class _CameraScreenState extends State<CameraScreen>
   Timer? _playbackTimer;
   Timer? _recordingTimer;
   DateTime? _recordingStartTime;
+  Duration _pausedDuration = Duration.zero;
+  DateTime? _pauseStartTime;
   String _timerText = "00:00";
   String? _lastCapturedImagePath;
   bool _flashActive = false;
@@ -170,7 +173,10 @@ class _CameraScreenState extends State<CameraScreen>
     _samplingTimer = Timer.periodic(Duration(milliseconds: intervalMs), (
       timer,
     ) {
-      if (_isInitialized && _controller != null && !_isPlayingPlayback) {
+      if (_isInitialized &&
+          _controller != null &&
+          !_isPlayingPlayback &&
+          !_isPaused) {
         _captureFrame();
       }
     });
@@ -225,7 +231,8 @@ class _CameraScreenState extends State<CameraScreen>
       timer,
     ) {
       if (_recordingStartTime != null && mounted) {
-        final elapsed = DateTime.now().difference(_recordingStartTime!);
+        final elapsed =
+            DateTime.now().difference(_recordingStartTime!) - _pausedDuration;
         final minutes = elapsed.inMinutes.toString().padLeft(2, '0');
         final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
         setState(() {
@@ -238,12 +245,33 @@ class _CameraScreenState extends State<CameraScreen>
     _restartSampling();
   }
 
+  void _togglePause() {
+    if (!_isRecording) return;
+
+    setState(() {
+      _isPaused = !_isPaused;
+      if (_isPaused) {
+        _pauseStartTime = DateTime.now();
+        _statusMessage = "RECORDING PAUSED";
+        _samplingTimer?.cancel();
+      } else {
+        _pausedDuration += DateTime.now().difference(_pauseStartTime!);
+        _statusMessage = "CAPTURING LOW-FPS VIDEO STREAM...";
+        _restartSampling();
+      }
+    });
+  }
+
   void _stopRecording() {
     if (!_isRecording) return;
 
     _recordingTimer?.cancel();
+    _samplingTimer?.cancel();
     setState(() {
       _isRecording = false;
+      _isPaused = false;
+      _pausedDuration = Duration.zero;
+      _pauseStartTime = null;
       _statusMessage =
           "RECORDING STOPPED. ${_capturedFrames.length} FRAMES SAVED.";
     });
@@ -416,10 +444,6 @@ class _CameraScreenState extends State<CameraScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // 2. Settings Toolbar (Glassmorphic Slider & Mode Switch)
-                          _buildSettingsToolbar(isPortrait),
-                          const SizedBox(height: 12),
-
                           // 3. Main Camera Viewport Console
                           _buildViewport(isPortrait),
                           const SizedBox(height: 16),
@@ -488,29 +512,6 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "RECON-1 CAMERA",
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    "ULTRA LOW FPS CAPTURE",
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.0,
-                      color: const Color(0xFF6366F1).withOpacity(0.8),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
 
@@ -559,7 +560,95 @@ class _CameraScreenState extends State<CameraScreen>
               ],
             ),
           ),
+
+          // Settings Button
+          GestureDetector(
+            onTap: _showSettingsPanel,
+            child: Container(
+              padding: const EdgeInsets.all(10.0),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: const Icon(
+                Icons.settings,
+                color: Color(0xFF94A3B8),
+                size: 20,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showSettingsPanel() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111827),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          top: 24,
+          left: 20,
+          right: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              "SETTINGS",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 1.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            _buildSettingsToolbar(true),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF6366F1).withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                "CLOSE",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF6366F1),
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -954,19 +1043,23 @@ class _CameraScreenState extends State<CameraScreen>
                         width: 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: _pulseState
-                              ? const Color(0xFFEF4444)
-                              : Colors.transparent,
+                          color: _isPaused
+                              ? const Color(0xFFF59E0B)
+                              : (_pulseState
+                                    ? const Color(0xFFEF4444)
+                                    : Colors.transparent),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        "REC",
+                      Text(
+                        _isPaused ? "PAUSED" : "REC",
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFEF4444),
+                          color: _isPaused
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFFEF4444),
                         ),
                       ),
                     ],
@@ -1146,10 +1239,10 @@ class _CameraScreenState extends State<CameraScreen>
           children: [
             // Recording Toggle Button
             Expanded(
-              flex: 2,
+              flex: _isRecording ? 1 : 2,
               child: _buildConsoleButton(
                 icon: _isRecording ? Icons.square : Icons.circle,
-                label: _isRecording ? "HALT CAPTURE" : "INITIATE RECORD",
+                label: _isRecording ? "HALT" : "INITIATE RECORD",
                 color: _isRecording
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF6366F1),
@@ -1165,7 +1258,21 @@ class _CameraScreenState extends State<CameraScreen>
                       },
               ),
             ),
-            const SizedBox(width: 10),
+            if (_isRecording) const SizedBox(width: 10),
+
+            // Pause Button
+            if (_isRecording)
+              Expanded(
+                flex: 1,
+                child: _buildConsoleButton(
+                  icon: _isPaused ? Icons.play_arrow : Icons.pause,
+                  label: _isPaused ? "RESUME" : "PAUSE",
+                  color: const Color(0xFFF59E0B),
+                  outline: true,
+                  onPressed: _togglePause,
+                ),
+              ),
+            if (_isRecording) const SizedBox(width: 10),
 
             // Playback Toggle Button
             Expanded(
