@@ -182,6 +182,13 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) {
+      super.setState(fn);
+    }
+  }
+
   Future<void> _captureFrame() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
 
@@ -465,121 +472,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget _buildHeader() {
-    // Determine status colors based on states
-    Color dotColor = const Color(0xFF10B981); // Emerald
-    String statusTitle = "LIVE PREVIEW";
-    Color titleColor = const Color(0xFF94A3B8);
-
-    if (_isStatusError) {
-      dotColor = const Color(0xFFEF4444); // Coral Red
-      statusTitle = "SYSTEM ERROR";
-      titleColor = const Color(0xFFEF4444);
-    } else if (_isPlayingPlayback) {
-      dotColor = const Color(0xFF6366F1); // Indigo
-      statusTitle = "PLAYBACK MON";
-      titleColor = const Color(0xFF6366F1);
-    } else if (_isRecording) {
-      dotColor = const Color(0xFFEF4444); // Coral Red
-      statusTitle = "RECORDING ACTIVE";
-      titleColor = const Color(0xFFEF4444);
-    }
-
-    final showDot = !_isRecording || _pulseState; // blink when recording
-
-    return Container(
-      margin: const EdgeInsets.all(16.0),
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111827).withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: const Icon(
-                  Icons.videocam,
-                  color: Color(0xFF6366F1),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-            ],
-          ),
-
-          // System Status Dot & Label
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14.0,
-              vertical: 6.0,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: Colors.white.withOpacity(0.04)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: showDot ? dotColor : Colors.transparent,
-                    shape: BoxShape.circle,
-                    boxShadow: showDot
-                        ? [
-                            BoxShadow(
-                              color: dotColor,
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : [],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  statusTitle,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                    color: titleColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Settings Button
-          GestureDetector(
-            onTap: _showSettingsPanel,
-            child: Container(
-              padding: const EdgeInsets.all(10.0),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-              child: const Icon(
-                Icons.settings,
-                color: Color(0xFF94A3B8),
-                size: 20,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   void _showSettingsPanel() {
@@ -711,10 +604,11 @@ class _CameraScreenState extends State<CameraScreen>
                 onChanged: _isRecording || _isPlayingPlayback
                     ? null
                     : (val) {
-                        setState(() {
+                        if (_fps != val) {
                           _fps = val;
-                        });
-                        _restartSampling();
+                          setState(() {});
+                          _restartSampling();
+                        }
                       },
               ),
             ),
@@ -779,9 +673,10 @@ class _CameraScreenState extends State<CameraScreen>
                 onChanged: _isRecording
                     ? null
                     : (val) {
-                        setState(() {
+                        if (_bitrate != val) {
                           _bitrate = val;
-                        });
+                          setState(() {});
+                        }
                       },
               ),
             ),
@@ -1196,44 +1091,6 @@ class _CameraScreenState extends State<CameraScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Real-time Console Terminal Output Message
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.5),
-            border: Border.all(color: Colors.white.withOpacity(0.04)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const Text(
-                "> SYS_LOG:",
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _statusMessage,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: _isStatusError
-                        ? const Color(0xFFEF4444)
-                        : Colors.white.withOpacity(0.9),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
         // Grid Actions (Initiate, Halt, Export, Playback)
         Row(
           children: [
@@ -1310,6 +1167,57 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 16),
+
+        // Real-time Console Terminal Output Message
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+            border: Border.all(color: Colors.white.withOpacity(0.04)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Text(
+                "> SYS_LOG:",
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _statusMessage,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _isStatusError
+                        ? const Color(0xFFEF4444)
+                        : Colors.white.withOpacity(0.9),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Settings Button
+        Container(
+          width: double.infinity,
+          child: _buildConsoleButton(
+            icon: Icons.settings,
+            label: "SETTINGS",
+            color: const Color(0xFF64748B),
+            outline: true,
+            onPressed: _showSettingsPanel,
+          ),
         ),
       ],
     );
