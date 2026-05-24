@@ -7,6 +7,7 @@ import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +31,7 @@ class ReconCameraApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'RECON-1 Camera',
+      title: 'ANPR/ALPR Camera',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -344,7 +345,7 @@ class _CameraScreenState extends State<CameraScreen>
 
       final tempDir = await getTemporaryDirectory();
       final outputVideoPath =
-          '${tempDir.path}/recon1_timelapse_${DateTime.now().millisecondsSinceEpoch}.mp4';
+          '${tempDir.path}/anpr_alpr_timelapse_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
       setState(() {
         _statusMessage = "ENCODING LOW-FPS MP4 VIDEO...";
@@ -391,17 +392,51 @@ class _CameraScreenState extends State<CameraScreen>
       await FlutterQuickVideoEncoder.finish();
 
       setState(() {
-        _statusMessage = "VIDEO COMPILED. LAUNCHING EXPORT SHARE SHEET...";
+        _statusMessage = "SAVING TO DOWNLOADS FOLDER...";
       });
 
-      await Share.shareXFiles([
-        XFile(outputVideoPath),
-      ], text: 'RECON-1 Custom Video Time-lapse (${_fps.round()} FPS)');
+      // Save to Downloads folder
+      try {
+        // Request storage permission for Android
+        if (Platform.isAndroid) {
+          final status = await Permission.storage.request();
+          if (status.isDenied) {
+            throw Exception('Storage permission denied');
+          }
+        }
 
-      setState(() {
-        _statusMessage = "EXPORT COMPLETED SUCCESSFULLY.";
-        _isStatusError = false;
-      });
+        final downloadsDir =
+            await getDownloadsDirectory() ??
+            await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final downloadsPath =
+            '${downloadsDir.path}/anpr_alpr_timelapse_${timestamp}.mp4';
+
+        final tempFile = File(outputVideoPath);
+        await tempFile.copy(downloadsPath);
+
+        // Clean up temp file
+        await tempFile.delete();
+
+        setState(() {
+          _statusMessage =
+              "VIDEO SAVED TO DOWNLOADS: anpr_alpr_timelapse_${timestamp}.mp4";
+          _isStatusError = false;
+        });
+
+        // Also offer to share
+        await Share.shareXFiles([
+          XFile(downloadsPath),
+        ], text: 'ANPR/ALPR Custom Video Time-lapse (${_fps.round()} FPS)');
+      } catch (e) {
+        // Fallback to sharing if Downloads save fails
+        setState(() {
+          _statusMessage = "COULD NOT SAVE TO DOWNLOADS. SHARING INSTEAD...";
+        });
+        await Share.shareXFiles([
+          XFile(outputVideoPath),
+        ], text: 'ANPR/ALPR Custom Video Time-lapse (${_fps.round()} FPS)');
+      }
     } catch (e) {
       setState(() {
         _statusMessage = "EXPORT FAILED: $e";
@@ -442,8 +477,8 @@ class _CameraScreenState extends State<CameraScreen>
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
+                    horizontal: 12.0,
+                    vertical: 4.0,
                   ),
                   child: Center(
                     child: Container(
@@ -453,11 +488,11 @@ class _CameraScreenState extends State<CameraScreen>
                         children: [
                           // 3. Main Camera Viewport Console
                           _buildViewport(isPortrait),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
 
                           // 4. Tech Action Console Buttons
                           _buildActionConsole(),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -1099,7 +1134,7 @@ class _CameraScreenState extends State<CameraScreen>
               flex: _isRecording ? 1 : 2,
               child: _buildConsoleButton(
                 icon: _isRecording ? Icons.square : Icons.circle,
-                label: _isRecording ? "HALT" : "INITIATE RECORD",
+                label: _isRecording ? "STOP" : "RECORD",
                 color: _isRecording
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF6366F1),
@@ -1136,7 +1171,7 @@ class _CameraScreenState extends State<CameraScreen>
               flex: 1,
               child: _buildConsoleButton(
                 icon: _isPlayingPlayback ? Icons.stop : Icons.play_arrow,
-                label: _isPlayingPlayback ? "STOP PREV" : "PLAY TIMELAPSE",
+                label: _isPlayingPlayback ? "STOP PREV" : "PLAY ",
                 color: const Color(0xFF6366F1),
                 outline: true,
                 disabled: _isRecording || _capturedFrames.isEmpty,
@@ -1156,7 +1191,7 @@ class _CameraScreenState extends State<CameraScreen>
               flex: 1,
               child: _buildConsoleButton(
                 icon: Icons.share,
-                label: "EXPORT SEQUENCE",
+                label: "EXPORT",
                 color: const Color(0xFF10B981),
                 outline: true,
                 disabled:
